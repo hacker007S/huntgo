@@ -17,9 +17,9 @@
 <body>
 <main>
   <h1>HuntGo for eBay — Privacy Policy</h1>
-  <div class="meta">Pycode Ltd · Effective 28 August 2026 · Applies to the Chrome extension "HuntGo for eBay" version 3.9 and later · updated 31 August 2026</div>
+  <div class="meta">Pycode Ltd · Effective 8 September 2026 · Applies to the Chrome extension "HuntGo for eBay" version 3.9 and later · updated 8 September 2026</div>
 
-  <p>HuntGo for eBay runs inside your browser. Pycode Ltd operates no server for it and receives none of the data it handles. This page explains what the extension reads, where it sends it, and what it stores.</p>
+  <p>HuntGo for eBay runs inside your browser. Pycode Ltd runs one small service for it — the licence service described below — and receives nothing else. This page explains what the extension reads, where it sends it, and what it stores.</p>
 
   <h2>What the extension reads</h2>
   <ul>
@@ -31,14 +31,14 @@
 
   <h2>Where data goes</h2>
   <ul>
-    <li><strong>Your Google Sheet.</strong> When you press Send or Add, or start a run, the products and the verdicts the extension computes are posted to a Google Apps Script web app that <em>you</em> deploy on <em>your</em> Google Sheet, at the URL you paste into Settings. There is no built-in destination. The web app is reachable by anyone who has its URL unless you set the optional pipeline token, so keep the URL private and set a token.</li>
+    <li><strong>Your Google Sheet.</strong> When you press Send or Add, or start a run, the products and the verdicts the extension computes are posted to a Google Apps Script web app that <em>you</em> deploy on <em>your</em> Google Sheet, at the URL you paste into Settings. There is no built-in destination. The web app refuses every request that does not carry the pipeline token your sheet mints for you (Settings tab, <code>api_token</code>), so the URL alone gives no access.</li>
     <li><strong>AI providers, only if you add your own key.</strong> If you enter a Google Gemini or Anthropic API key in Settings, product titles and your recent accepted keywords are sent to that provider to choose search keywords, and, when finding suppliers, the source listing image and up to eight candidate supplier images are sent to Gemini for matching. This happens under your own account with that provider.</li>
-    <li><strong>Licence check.</strong> If you enter a HuntGo Pro licence key, the key and a device label are sent to Lemon Squeezy (our payment and licensing provider) to confirm the subscription is active. Payment itself happens on Lemon Squeezy's site under its own privacy policy; the extension never sees your card details.</li>
+    <li><strong>Licence check.</strong> If you enter a HuntGo licence key, the key and a random install identifier are sent to our licence service (a Google Apps Script run by Pycode Ltd), which confirms the subscription with Gumroad, our payment provider, and returns a signed entitlement. Free-trial usage counts and, on paid plans, daily usage counts are recorded against that install identifier so the limits apply per install. No product data, browsing data or personal details are sent. Payment itself happens on Gumroad's site under its own privacy policy; the extension never sees your card details.</li>
     <li><strong>Email.</strong> If you set an alert address on your sheet's Settings tab, winner alerts and the weekly summary are sent from your own Google account to that address by your own Apps Script.</li>
   </ul>
 
   <h2>What is stored on your device</h2>
-  <p>Settings, screening criteria, keyword history, daily usage counters, the free-plan counters, your licence status, and (if entered) your API keys and pipeline token are stored in Chrome's extension storage on your device only. They are not synced and are not sent to Pycode Ltd. Removing the extension deletes all of it; your sheet stays with you.</p>
+  <p>Settings, screening criteria, keyword history, daily usage counters, the free-plan counters, your licence status, and (if entered) your API keys and pipeline token are stored in Chrome's extension storage on your device. The free-plan counters, your licence status and the random install identifier are also kept in Chrome's synced extension storage, which follows your own Chrome profile and is not readable by Pycode Ltd. Nothing here is sent to Pycode Ltd except as described under Licence check. Removing the extension deletes the local copy; your sheet stays with you.</p>
 
   <h2>What the extension does not do</h2>
   <ul>
