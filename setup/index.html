@@ -63,24 +63,26 @@ code{background:rgba(255,255,255,.08);border-radius:6px;padding:1px 6px;font-siz
       <li>Click <b>Deploy</b>. If Google asks to authorise again: <b>Authorise access</b> → your account → <b>Advanced</b> → <b>Go to … (unsafe)</b> → <b>Allow</b>.</li>
       <li>You'll see two URLs. Copy the <b>Web app</b> one — it ends in <code>/exec</code> — with the <b>Copy</b> button under it. Then click <b>Done</b>.</li>
     </ol>
-    <p class="note">“Anyone” does not expose your sheet: the URL contains a long random secret, and only someone holding the exact URL can reach the script. Step 6 adds a second lock on top.</p></div>
+    <p class="note">“Anyone” does not expose your sheet. The script refuses every request that does not carry your own <code>api_token</code>, which it creates for you in Step 3 — so the URL on its own opens nothing. You copy that token in Step 5.</p></div>
 
   <div class="step"><h2><span class="n">5</span>Connect the extension</h2>
+    <p>Two things go into the extension: the URL, and the token your sheet made for you. Both are required.</p>
     <ol>
+      <li>Copy your token: open your Google Sheet → the <b>Settings</b> tab at the bottom → the value next to <code>api_token</code> (a 32-character code). <span class="note">Not there? In the Apps Script editor pick <b>showApiToken</b> in the function list and press <b>Run</b> — it prints the token in the log.</span></li>
       <li>In Chrome, click the <b>HuntGo icon</b> in the toolbar (pin it via the 🧩 puzzle icon if hidden).</li>
       <li>Click the <b>⚙ gear</b> at the top of the popup — the Settings page opens.</li>
-      <li>Go to the <b>Pipeline</b> section and paste your <code>/exec</code> URL into <b>Pipeline URL</b>.</li>
-      <li>Click <b>Test connection</b>. Expect: <i>“Connected — HuntGo pipeline v90”</i>.</li>
+      <li>In the <b>Pipeline</b> section paste your <code>/exec</code> URL into <b>Pipeline URL</b> and the 32-character code into <b>Pipeline token</b>.</li>
+      <li>Click <b>Test connection</b>. Expect: <i>“Connected — HuntGo pipeline v93”</i>.</li>
       <li>Click <b>Save settings</b> (bottom-left).</li>
-    </ol></div>
+    </ol>
+    <p class="note">Without the token every request is refused, so nobody who finds your <code>/exec</code> URL can read or write your sheet. To change it later: clear the <code>api_token</code> cell, run <b>formatSheets</b> again, and paste the new code into the extension.</p></div>
 
-  <div class="step"><h2><span class="n">6</span>Add the token lock (recommended)</h2>
-    <p>One secret typed in two places — after this, requests without it are refused even if someone got your URL.</p>
+  <div class="step"><h2><span class="n">6</span>Your free trial key</h2>
+    <p>HuntGo needs a key even to try it — the trial is 5 hunts and 5 Terapeak validations.</p>
     <ol>
-      <li>Open your Google Sheet → click the <b>Settings</b> tab at the bottom.</li>
-      <li>Find the <code>api_token</code> row and type any secret in its value cell, e.g. <code>hunter-2026-kite</code>.</li>
-      <li>Back in the extension's <b>⚙ Settings → Pipeline</b>, paste the <b>same secret</b> into <b>Pipeline token</b>.</li>
-      <li><b>Test connection</b> again (should still say Connected), then <b>Save settings</b>.</li>
+      <li>Get a free key at <a href="https://pycodeltd.gumroad.com/l/huntgo-trial?wanted=true&amp;price=0">pycodeltd.gumroad.com/l/huntgo-trial</a> — your email, no card. The key appears on the next page and in your inbox.</li>
+      <li>In the extension's <b>⚙ Settings → Plan</b>, paste it into <b>Licence key</b> and press <b>Activate</b>.</li>
+      <li>Ready for more? <a href="https://pycodeltd.gumroad.com/l/qfcric/LAUNCH50">Starter and Pro</a> lift the limits to 50 or 100 a day.</li>
     </ol></div>
 
   <div class="step"><h2><span class="n">7</span>Tune it (optional)</h2>

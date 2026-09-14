@@ -1,5 +1,5 @@
 /**
- * HuntGo backend v91 — Google Apps Script web app bound to the research sheet.
+ * HuntGo backend v93 — Google Apps Script web app bound to the research sheet.
  * (the version the API reports lives in doGet: search "service:")
  *
  * Tabs: "Amazon Hunting", "AliExpress Hunting", "eBay Hunting" (ideas per
@@ -889,6 +889,9 @@ function clearStaleValidations_(sh) {
 }
 
 function formatSheetsLocked_() {
+  // v92: mint the API token here so it is on the Settings tab before the
+  // extension's first call (the setup guide copies it in Step 5)
+  if (!settingGet_('api_token')) mintApiToken_();
   settingsSheet_(); // Settings tab, fee knobs and named ranges (v78)
   ALL_TABS.forEach(function (t) {
     var sh = getTab_(t);
@@ -1282,7 +1285,8 @@ function safeRows_(rows) {
 function sheetSafe_(v) {
   if (typeof v !== 'string') return v;
   if (v === '-' || /^-?\d/.test(v) || v.charAt(0) === "'") return v;
-  return /^[=+\-@]/.test(v) ? "'" + v : v;
+  // v92: also catch a leading tab/space before the formula character (CSV/Excel vector)
+  return /^[\s\u00a0]*[=+\-@]/.test(v) ? "'" + v : v;
 }
 
 /** one read + one write per row (was one setValue per field); formula cells keep their formula */
@@ -1444,7 +1448,7 @@ var SETTINGS_DEFAULTS = [
   ['alerts', 'on', 'on / off — email when a product passes Terapeak'],
   ['weekly_retro', 'on', 'on / off — Monday 8am summary email (needs Run ▶ setupTriggers once)'],
   ['brand', 'HuntGo', 'Name shown in emails'],
-  ['api_token', '', 'Optional. When set, the extension must send the same token (Options ▸ Pipeline token).'],
+  ['api_token', '', 'Required. Minted automatically the first time the web app is called — copy this value into the extension (Options ▸ Pipeline token).'],
   // ---- eBay UK fee model (business seller, Aug 2026). Edit here; every winner row recomputes live.
   ['fvf_pct', 11.9, 'Final value fee % for your main category (Home & Garden 11.9, most categories 12.9, Business & Industrial 12.5, Books/Media 9.9).'],
   ['reg_fee_pct', 0.35, 'Regulatory operating fee % (0.35 since Apr 2024)'],
@@ -1505,10 +1509,60 @@ function settingsSheet_() {
   }
   return sh;
 }
-/** the API token a customer may set on the Settings tab ('' = open) */
+var UNAUTH_MSG = 'unauthorised — copy api_token from the sheet\'s Settings tab into Options ▸ Pipeline token';
+var MAX_ROWS_PER_POST = 100;     // the extension sends 15 at a time
+var WINNER_MAIL_PER_DAY = 25;    // MailApp allows ~100/day on a consumer account
+
+/**
+ * The API token on the Settings tab. v92: the web app never runs open — a
+ * blank token is minted on first use, so every request must carry the
+ * sheet's own token. (Before v92 a blank token meant "allow everyone".)
+ */
 function authOk_(token) {
   var want = settingGet_('api_token');
-  return !want || String(token || '') === want;
+  if (!want) want = mintApiToken_();
+  return safeEq_(String(token || ''), want);
+}
+/** Run ▶ showApiToken — prints the token to paste into the extension (Options ▸ Pipeline token) */
+function showApiToken() {
+  var t = settingGet_('api_token') || mintApiToken_();
+  Logger.log('API_TOKEN ' + t);
+  return t;
+}
+function mintApiToken_() {
+  var t = Utilities.getUuid().replace(/-/g, '');
+  settingSet_('api_token', t);
+  return t;
+}
+function settingSet_(key, value) {
+  var sh = settingsSheet_();
+  var last = sh.getLastRow();
+  if (last >= 2) {
+    var keys = sh.getRange(2, 1, last - 1, 1).getValues();
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i][0]).trim() === key) { sh.getRange(i + 2, 2).setValue(value); return; }
+    }
+  }
+  sh.appendRow([key, value, '']);
+}
+/** constant-time compare — no early exit on the first wrong character */
+function safeEq_(a, b) {
+  a = String(a); b = String(b);
+  var diff = a.length ^ b.length;
+  var n = Math.max(a.length, b.length);
+  for (var i = 0; i < n; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+/** at most WINNER_MAIL_PER_DAY winner emails a day, so a burst can't exhaust MailApp */
+function mailBudgetOk_() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var key = 'mail_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    var n = Number(props.getProperty(key) || 0);
+    if (n >= WINNER_MAIL_PER_DAY) return false;
+    props.setProperty(key, String(n + 1));
+    return true;
+  } catch (err) { return true; }
 }
 function settingGet_(key) {
   try {
@@ -1539,6 +1593,7 @@ function notifyWinner_(rec) {
     if (!settingOn_('alerts')) return;
     var to = ownerEmail_();
     if (!to) return;
+    if (!mailBudgetOk_()) return;
     var url = SpreadsheetApp.getActiveSpreadsheet().getUrl();
     var html =
       '<div style="font-family:Arial,sans-serif;max-width:560px">' +
@@ -1655,30 +1710,40 @@ function buildIndex_() {
     var last = sh.getLastRow();
     if (last <= HEADER_ROW) return;
     var n = last - HEADER_ROW;
-    var slugs = sh.getRange(HEADER_ROW + 1, map['slug'], n, 1).getValues();
-    var urls = map['url'] ? sh.getRange(HEADER_ROW + 1, map['url'], n, 1).getValues() : null;
-    // winner rows carry source_url/supplier_url instead of url, and their
-    // keyword is the niche identity — index all three
-    var srcs = isWinner && map['source_url'] ? sh.getRange(HEADER_ROW + 1, map['source_url'], n, 1).getValues() : null;
-    var sups = isWinner && map['supplier_url'] ? sh.getRange(HEADER_ROW + 1, map['supplier_url'], n, 1).getValues() : null;
-    var kws = map['main_keyword'] ? sh.getRange(HEADER_ROW + 1, map['main_keyword'], n, 1).getValues() : null;
-    var statuses = !isWinner && map['status'] ? sh.getRange(HEADER_ROW + 1, map['status'], n, 1).getValues() : null;
-    var reasons = !isWinner && map['failure_mode'] ? sh.getRange(HEADER_ROW + 1, map['failure_mode'], n, 1).getValues() : null;
+    // v93: ONE read per tab. This used to be up to seven getValues() calls per
+    // tab (28 round trips over ~700 rows) on every single request, which made
+    // a one-row verdict write slow enough to reach the extension's timeout.
+    var need = ['slug', 'url', 'main_keyword'];
+    if (isWinner) need.push('source_url', 'supplier_url');
+    else need.push('status', 'failure_mode');
+    var width = 0;
+    need.forEach(function (k) { if (map[k] && map[k] > width) width = map[k]; });
+    if (!width) return;
+    width = Math.min(width, sh.getMaxColumns());
+    var rows = sh.getRange(HEADER_ROW + 1, 1, n, width).getValues();
+    var cell = function (row, key) {
+      var c = map[key];
+      return c && c <= width ? row[c - 1] : '';
+    };
     for (var r = 0; r < n; r++) {
+      var row = rows[r];
       var loc = { sh: sh, map: map, rowNum: r + HEADER_ROW + 1 };
-      var sl = String(slugs[r][0]);
+      var sl = String(cell(row, 'slug'));
       if (sl && !idx.slug[sl]) idx.slug[sl] = loc;
-      var cands = [urls && urls[r][0], srcs && srcs[r][0], sups && sups[r][0]];
+      // winner rows carry source_url/supplier_url instead of url, and their
+      // keyword is the niche identity — index all three
+      var cands = [cell(row, 'url')];
+      if (isWinner) cands.push(cell(row, 'source_url'), cell(row, 'supplier_url'));
       for (var ui = 0; ui < cands.length; ui++) {
         if (!cands[ui]) continue;
         var u = normUrl_(cands[ui]);
         if (u && !idx.url[u]) idx.url[u] = loc;
       }
-      if (kws) {
-        var k = normKw_(kws[r][0]);
+      if (map['main_keyword']) {
+        var k = normKw_(cell(row, 'main_keyword'));
         if (k && isWinner && !idx.kw[k]) idx.kw[k] = loc;
-        var judged = statuses && String(statuses[r][0]).trim() === 'rejected' &&
-          !(reasons && String(reasons[r][0]).trim() === 'tp-no-data');
+        var judged = !isWinner && String(cell(row, 'status')).trim() === 'rejected' &&
+          String(cell(row, 'failure_mode')).trim() !== 'tp-no-data';
         if (k && judged && !idx.judged[k]) idx.judged[k] = loc;
       }
     }
@@ -1708,7 +1773,7 @@ function doPostLocked_(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
   if (!authOk_(body.token)) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorised — check the pipeline token' }))
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: UNAUTH_MSG }))
       .setMimeType(ContentService.MimeType.JSON);
   }
   // v87: reads arrive as POST {action, ...params, token} so the token is never
@@ -1718,6 +1783,11 @@ function doPostLocked_(e) {
     try { return doGetLocked_({ parameter: body }); } finally { READ_ONLY_MAPS = false; }
   }
   var rows = body.candidates || (body.verdict ? [body.verdict] : []);
+  // v92: bound the work one request can force on the sheet
+  if (!Array.isArray(rows) || rows.length > MAX_ROWS_PER_POST) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'too many rows in one request (max ' + MAX_ROWS_PER_POST + ')' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   var received = 0;
   var existing = 0;
   var idx = buildIndex_();
@@ -1906,8 +1976,10 @@ function doGet(e) {
   }
   READ_ONLY_MAPS = true;
   try {
-    if (e && e.parameter && e.parameter.action && !authOk_(e.parameter.token)) {
-      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorised — check the pipeline token' }))
+    // v92: every read is authenticated — the root ping used to hand the
+    // spreadsheet id and row counts to anyone holding the /exec URL
+    if (!authOk_(e && e.parameter && e.parameter.token)) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: UNAUTH_MSG }))
         .setMimeType(ContentService.MimeType.JSON);
     }
     return doGetLocked_(e);
@@ -2178,7 +2250,7 @@ function doGetLocked_(e) {
   // run ends. A write, so it needs the token when one is set.
   if (e && e.parameter && e.parameter.action === 'rank') {
     if (!authOk_(e.parameter.token)) {
-      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorised — check the pipeline token' }))
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: UNAUTH_MSG }))
         .setMimeType(ContentService.MimeType.JSON);
     }
     var ranked = rankWinners_(getTab_(LISTING_TAB));
@@ -2190,7 +2262,7 @@ function doGetLocked_(e) {
   ALL_TABS.forEach(function (t) { counts[t] = Math.max(0, getTab_(t).getLastRow() - HEADER_ROW); });
   return ContentService.createTextOutput(
     // sheetId (v90): the extension shows its panel only on THIS sheet
-    JSON.stringify({ ok: true, service: 'HuntGo pipeline v91', tabs: counts, sheetId: SpreadsheetApp.getActiveSpreadsheet().getId() })
+    JSON.stringify({ ok: true, service: 'HuntGo pipeline v93', tabs: counts, sheetId: SpreadsheetApp.getActiveSpreadsheet().getId() })
   ).setMimeType(ContentService.MimeType.JSON);
 }
 
